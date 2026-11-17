@@ -64,6 +64,8 @@ LOG_PATH = os.path.join(app_dir(), "csu_error.log")
 
 
 def python_executable() -> str:
+    if getattr(sys, "frozen", False):
+        return "py" if shutil.which("py") else "python"
     exe = sys.executable
     if exe.lower().endswith("pythonw.exe"):
         exe = exe[:-5] + ".exe"
@@ -280,11 +282,11 @@ class App(tk.Tk):
 
         left = tk.Frame(paned, bg=PANEL_BG)
         paned.add(left, minsize=180, width=280)
-        ttk.Button(left, text="Открыть проект", command=self.choose_project).pack(fill="x", padx=6, pady=6)
+        ttk.Button(left, text="Open Project", command=self.choose_project).pack(fill="x", padx=6, pady=6)
 
         buttons = [
-            [("Новый файл", lambda: self.create_entry(False)), ("Новая папка", lambda: self.create_entry(True))],
-            [("Переименовать", self.rename_entry), ("Удалить", self.delete_entries)],
+            [("New File", lambda: self.create_entry(False)), ("New Folder", lambda: self.create_entry(True))],
+            [("Rename", self.rename_entry), ("Delete", self.delete_entries)],
         ]
         for row in buttons:
             actions = tk.Frame(left, bg=PANEL_BG)
@@ -293,7 +295,7 @@ class App(tk.Tk):
                 ttk.Button(actions, text=text, command=command).pack(
                     side="left", expand=True, fill="x", padx=(0 if i == 0 else 4, 0))
 
-        self.project_label = tk.Label(left, text="Проект не выбран", bg=PANEL_BG, fg="#cccccc", anchor="w")
+        self.project_label = tk.Label(left, text="No project selected", bg=PANEL_BG, fg="#cccccc", anchor="w")
         self.project_label.pack(fill="x", padx=6)
 
         tree_frame = tk.Frame(left, bg=PANEL_BG)
@@ -312,12 +314,12 @@ class App(tk.Tk):
         paned.add(right, minsize=300)
         self.tab_bar = tk.Frame(right, bg=PANEL_BG)
         self.tab_bar.pack(fill="x")
-        ttk.Button(self.tab_bar, text="Запуск (F5)", command=self.run_active).pack(side="right", padx=4, pady=2)
+        ttk.Button(self.tab_bar, text="Run (F5)", command=self.run_active).pack(side="right", padx=4, pady=2)
         self.content = tk.Frame(right, bg=BG)
         self.content.pack(fill="both", expand=True)
 
     def choose_project(self):
-        path = filedialog.askdirectory(title="Выберите папку проекта",
+        path = filedialog.askdirectory(title="Select project folder",
                                        initialdir=self.config_data.get("project"))
         if path:
             self.load_project(os.path.normpath(path))
@@ -359,7 +361,7 @@ class App(tk.Tk):
     def create_entry(self, is_dir: bool):
         project = self.config_data.get("project")
         if not project or not os.path.isdir(project):
-            messagebox.showwarning(APP_NAME, "Сначала откройте проект")
+            messagebox.showwarning(APP_NAME, "Open a project first")
             return
 
         selection = self.tree.selection()
@@ -367,10 +369,10 @@ class App(tk.Tk):
         if os.path.isfile(base):
             base = os.path.dirname(base)
 
-        kind = "папки" if is_dir else "файла"
+        kind = "folder" if is_dir else "file"
         name = simpledialog.askstring(
             APP_NAME,
-            f"Путь {kind} внутри «{os.path.relpath(base, project)}»:\n(например: folder/folder/file.txt)",
+            f"Path of the {kind} inside \u00ab{os.path.relpath(base, project)}\u00bb:\n(e.g.: folder/folder/file.txt)",
             parent=self,
         )
         if not name or not name.strip():
@@ -382,10 +384,10 @@ class App(tk.Tk):
         except ValueError:
             inside = False
         if not inside:
-            messagebox.showerror(APP_NAME, "Путь должен находиться внутри проекта")
+            messagebox.showerror(APP_NAME, "The path must be inside the project")
             return
         if os.path.exists(target):
-            messagebox.showerror(APP_NAME, "Такой файл или папка уже существует")
+            messagebox.showerror(APP_NAME, "A file or folder with this name already exists")
             return
 
         try:
@@ -432,19 +434,19 @@ class App(tk.Tk):
     def rename_entry(self):
         selection = self.tree.selection()
         if len(selection) != 1:
-            messagebox.showinfo(APP_NAME, "Выберите один файл или папку")
+            messagebox.showinfo(APP_NAME, "Select a single file or folder")
             return
         old = selection[0]
-        new_name = simpledialog.askstring(APP_NAME, "Новое имя:", initialvalue=os.path.basename(old), parent=self)
+        new_name = simpledialog.askstring(APP_NAME, "New name:", initialvalue=os.path.basename(old), parent=self)
         new_name = (new_name or "").strip()
         if not new_name or new_name == os.path.basename(old):
             return
         if "/" in new_name or "\\" in new_name:
-            messagebox.showerror(APP_NAME, "Имя не должно содержать / или \\")
+            messagebox.showerror(APP_NAME, "The name must not contain / or \\")
             return
         new = os.path.join(os.path.dirname(old), new_name)
         if os.path.exists(new) and not os.path.samefile(old, new):
-            messagebox.showerror(APP_NAME, "Такой файл или папка уже существует")
+            messagebox.showerror(APP_NAME, "A file or folder with this name already exists")
             return
 
         affected = self._tabs_under(old)
@@ -465,11 +467,11 @@ class App(tk.Tk):
     def delete_entries(self):
         selection = self.tree.selection()
         if not selection:
-            messagebox.showinfo(APP_NAME, "Выберите файлы или папки для удаления")
+            messagebox.showinfo(APP_NAME, "Select files or folders to delete")
             return
         paths = [p for p in selection if not any(p.startswith(q + os.sep) for q in selection)]
         names = ", ".join(os.path.basename(p) for p in paths[:5]) + ("..." if len(paths) > 5 else "")
-        if not messagebox.askyesno(APP_NAME, f"Удалить безвозвратно: {names}?", icon="warning"):
+        if not messagebox.askyesno(APP_NAME, f"Permanently delete: {names}?", icon="warning"):
             return
         for path in paths:
             for tab_path in self._tabs_under(path):
@@ -490,11 +492,11 @@ class App(tk.Tk):
             return
         try:
             if os.path.getsize(path) > MAX_FILE_SIZE:
-                raise ValueError("Файл слишком большой")
+                raise ValueError("File is too large")
             with open(path, "rb") as f:
                 data = f.read()
             if b"\0" in data:
-                raise ValueError("Бинарный файл нельзя открыть")
+                raise ValueError("Cannot open a binary file")
             content = data.decode("utf-8", errors="replace")
             crlf = "\r\n" in content
             content = content.replace("\r\n", "\n")
@@ -506,7 +508,7 @@ class App(tk.Tk):
         header.pack(side="left", padx=(0, 1))
         label = tk.Label(header, text=os.path.basename(path), bg=INACTIVE_BG, fg=FG, padx=8, pady=4)
         label.pack(side="left")
-        close = tk.Label(header, text="×", bg=INACTIVE_BG, fg="#aaaaaa", padx=6, cursor="hand2",
+        close = tk.Label(header, text="\u00d7", bg=INACTIVE_BG, fg="#aaaaaa", padx=6, cursor="hand2",
                          font=("Segoe UI", 12))
         close.pack(side="left")
         label.bind("<Button-1>", lambda _e: self.select_tab(path))
@@ -555,17 +557,17 @@ class App(tk.Tk):
 
     def run_active(self):
         if self.active not in self.tabs:
-            messagebox.showinfo(APP_NAME, "Откройте файл для запуска")
+            messagebox.showinfo(APP_NAME, "Open a file to run it")
             return
         path = self.active
         if self.tabs[path]["view"].dirty and not self.save_file(path):
             return
         if os.name != "nt":
-            messagebox.showinfo(APP_NAME, "Запуск через консоль поддерживается только в Windows")
+            messagebox.showinfo(APP_NAME, "Running in a console is supported on Windows only")
             return
         prefix = RUNNERS.get(os.path.splitext(path)[1].lower())
         if prefix is None:
-            messagebox.showinfo(APP_NAME, "Для этого типа файлов запуск не настроен")
+            messagebox.showinfo(APP_NAME, "Running is not configured for this file type")
             return
         command = subprocess.list2cmdline(prefix + [path])
         try:
@@ -582,7 +584,7 @@ class App(tk.Tk):
         tab = self.tabs[path]
         if ask and tab["view"].dirty:
             self.select_tab(path)
-            answer = messagebox.askyesnocancel(APP_NAME, f"Сохранить изменения в «{os.path.basename(path)}»?")
+            answer = messagebox.askyesnocancel(APP_NAME, f"Save changes to \u00ab{os.path.basename(path)}\u00bb?")
             if answer is None or (answer and not self.save_file(path)):
                 return False
         self.tabs.pop(path)
